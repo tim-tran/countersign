@@ -1,0 +1,16 @@
+.DS_Store
+
+# Rails app (ledger/)
+/ledger/.bundle
+/ledger/.env*
+/ledger/log/*
+!/ledger/log/.keep
+/ledger/tmp/*
+!/ledger/tmp/.keep
+/ledger/tmp/pids/*
+!/ledger/tmp/pids/.keep
+/ledger/storage/*
+!/ledger/storage/.keep
+/ledger/tmp/storage/*
+!/ledger/tmp/storage/.keep
+/ledger/config/*.key
