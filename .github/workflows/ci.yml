@@ -35,7 +35,6 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: ledger/.ruby-version
           working-directory: ledger
           bundler-cache: true
 
@@ -54,7 +53,6 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: ledger/.ruby-version
           working-directory: ledger
           bundler-cache: true
 
