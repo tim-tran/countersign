@@ -51,7 +51,7 @@ module Ledger
       check_balanced!
 
       ApplicationRecord.transaction do
-        balances = AccountBalance.where(account_id: @accounts.values.map(&:id)).order(:account_id).index_by(&:account_id)
+        balances = lock_balances
         @release_held.each { |account_id, amount| balances.fetch(account_id).held_minor -= amount }
         apply_deltas(balances)
         check_available!(balances)
@@ -73,6 +73,13 @@ module Ledger
         end
         txn
       end
+    end
+
+    # Locks every touched balance row in ascending account_id order so that
+    # concurrent posts serialize per account and cannot deadlock each other.
+    def lock_balances
+      ids = (@accounts.values.map(&:id) + @release_held.keys).uniq
+      AccountBalance.where(account_id: ids).order(:account_id).lock("FOR UPDATE").index_by(&:account_id)
     end
 
     def validate_shape!
