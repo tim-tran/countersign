@@ -18,4 +18,12 @@ RSpec.describe Account do
     create(:account, code: "employer_cash")
     expect { build(:account, code: "employer_cash").save!(validate: false) }.to raise_error(ActiveRecord::RecordNotUnique)
   end
+
+  it "gives account_balances no default account_id" do
+    expect {
+      ApplicationRecord.transaction(requires_new: true) do
+        ApplicationRecord.connection.execute("INSERT INTO account_balances DEFAULT VALUES")
+      end
+    }.to raise_error(ActiveRecord::NotNullViolation)
+  end
 end

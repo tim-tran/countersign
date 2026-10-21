@@ -32,25 +32,6 @@ CREATE TABLE public.account_balances (
 
 
 --
--- Name: account_balances_account_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.account_balances_account_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: account_balances_account_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.account_balances_account_id_seq OWNED BY public.account_balances.account_id;
-
-
---
 -- Name: accounts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -107,13 +88,6 @@ CREATE TABLE public.ar_internal_metadata (
 CREATE TABLE public.schema_migrations (
     version character varying NOT NULL
 );
-
-
---
--- Name: account_balances account_id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.account_balances ALTER COLUMN account_id SET DEFAULT nextval('public.account_balances_account_id_seq'::regclass);
 
 
 --
