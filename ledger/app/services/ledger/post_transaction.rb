@@ -20,6 +20,32 @@ module Ledger
 
     def call
       validate_shape!
+      if (existing = LedgerTransaction.find_by(idempotency_key: @key))
+        return replay(existing)
+      end
+
+      owns_transaction = !ApplicationRecord.connection.transaction_open?
+      post_new
+    rescue ActiveRecord::RecordNotUnique
+      raise unless owns_transaction
+
+      existing = LedgerTransaction.find_by(idempotency_key: @key)
+      raise unless existing
+
+      replay(existing)
+    end
+
+    private
+
+    # Same key and same canonical request returns the stored transaction;
+    # the same key with a different request is a client error.
+    def replay(existing)
+      raise ConflictError, "idempotency key #{@key.inspect} was already used for a different request" unless existing.request_hash == request_hash
+
+      existing.reload
+    end
+
+    def post_new
       load_accounts!
       check_currencies!
       check_balanced!
@@ -48,8 +74,6 @@ module Ledger
         txn
       end
     end
-
-    private
 
     def validate_shape!
       raise InvalidRequest, "a transaction needs at least two entries" unless @entries.is_a?(Array) && @entries.size >= 2
