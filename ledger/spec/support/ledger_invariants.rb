@@ -6,6 +6,7 @@ module LedgerInvariants
   def expect_ledger_consistent!(label: nil)
     expect_debits_equal_credits_per_currency!(label)
     expect_balances_match_entries!(label)
+    expect_held_matches_active_holds!(label)
   end
 
   private
@@ -38,6 +39,18 @@ module LedgerInvariants
     end
 
     expect(mismatched).to be_empty, labelled(label, "balance rows differ from entry sums (account_id => {expected, actual} as [debits, credits]): #{mismatched.to_h.inspect}")
+  end
+
+  def expect_held_matches_active_holds!(label)
+    active = Hold.where(status: "active").group(:account_id).sum(:amount_minor)
+    held = AccountBalance.pluck(:account_id, :held_minor).to_h
+    mismatched = (held.keys | active.keys).filter_map do |id|
+      expected = active.fetch(id, 0)
+      actual = held.fetch(id, 0)
+      [ id, { expected: expected, actual: actual } ] unless expected == actual
+    end
+
+    expect(mismatched).to be_empty, labelled(label, "held_minor differs from active holds (account_id => {expected, actual}): #{mismatched.to_h.inspect}")
   end
 end
 

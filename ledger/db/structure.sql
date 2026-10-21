@@ -152,6 +152,45 @@ ALTER SEQUENCE public.entries_id_seq OWNED BY public.entries.id;
 
 
 --
+-- Name: holds; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.holds (
+    id bigint NOT NULL,
+    account_id bigint NOT NULL,
+    amount_minor bigint NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
+    idempotency_key text NOT NULL,
+    request_hash character(64) NOT NULL,
+    ledger_transaction_id bigint,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT holds_amount_minor_check CHECK ((amount_minor > 0)),
+    CONSTRAINT holds_captured_has_transaction_check CHECK (((status = 'captured'::text) = (ledger_transaction_id IS NOT NULL))),
+    CONSTRAINT holds_status_check CHECK ((status = ANY (ARRAY['active'::text, 'captured'::text, 'released'::text])))
+);
+
+
+--
+-- Name: holds_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.holds_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: holds_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.holds_id_seq OWNED BY public.holds.id;
+
+
+--
 -- Name: ledger_transactions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -209,6 +248,13 @@ ALTER TABLE ONLY public.entries ALTER COLUMN id SET DEFAULT nextval('public.entr
 
 
 --
+-- Name: holds id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.holds ALTER COLUMN id SET DEFAULT nextval('public.holds_id_seq'::regclass);
+
+
+--
 -- Name: ledger_transactions id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -245,6 +291,14 @@ ALTER TABLE ONLY public.ar_internal_metadata
 
 ALTER TABLE ONLY public.entries
     ADD CONSTRAINT entries_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: holds holds_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.holds
+    ADD CONSTRAINT holds_pkey PRIMARY KEY (id);
 
 
 --
@@ -292,6 +346,27 @@ CREATE INDEX index_entries_on_ledger_transaction_id ON public.entries USING btre
 
 
 --
+-- Name: index_holds_on_account_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_holds_on_account_id ON public.holds USING btree (account_id);
+
+
+--
+-- Name: index_holds_on_idempotency_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_holds_on_idempotency_key ON public.holds USING btree (idempotency_key);
+
+
+--
+-- Name: index_holds_on_ledger_transaction_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_holds_on_ledger_transaction_id ON public.holds USING btree (ledger_transaction_id);
+
+
+--
 -- Name: index_ledger_transactions_on_idempotency_key; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -335,6 +410,14 @@ ALTER TABLE ONLY public.entries
 
 
 --
+-- Name: holds fk_rails_0e68052f5b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.holds
+    ADD CONSTRAINT fk_rails_0e68052f5b FOREIGN KEY (account_id) REFERENCES public.accounts(id);
+
+
+--
 -- Name: entries fk_rails_37a3feaeb6; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -348,6 +431,14 @@ ALTER TABLE ONLY public.entries
 
 ALTER TABLE ONLY public.ledger_transactions
     ADD CONSTRAINT fk_rails_969c84a0e1 FOREIGN KEY (reverses_id) REFERENCES public.ledger_transactions(id);
+
+
+--
+-- Name: holds fk_rails_aa253fcf62; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.holds
+    ADD CONSTRAINT fk_rails_aa253fcf62 FOREIGN KEY (ledger_transaction_id) REFERENCES public.ledger_transactions(id);
 
 
 --
@@ -373,6 +464,7 @@ ALTER TABLE ONLY public.account_balances
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261021000004'),
 ('20261021000003'),
 ('20261021000002'),
 ('20261021000001');

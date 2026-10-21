@@ -7,6 +7,11 @@ module LedgerHelpers
     Ledger::PostTransaction.call(key: key, entries: entries, **opts)
   end
 
+  # Moves money out of `code` to `vendor`.
+  def spend(code, amount, key: SecureRandom.uuid)
+    post([ leg(code, "credit", amount), leg("vendor", "debit", amount) ], key: key)
+  end
+
   def setup_accounts(cash_minor: 0)
     create(:account, code: "funding", kind: "equity", normal_side: "debit", allow_negative: true)
     create(:account, code: "cash")
