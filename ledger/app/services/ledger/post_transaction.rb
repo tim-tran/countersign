@@ -1,0 +1,117 @@
+module Ledger
+  # Posts one balanced, multi-entry transaction and updates the touched
+  # balance rows in the same database transaction.
+  class PostTransaction
+    DIRECTIONS = %w[debit credit].freeze
+
+    def self.call(...)
+      new(...).call
+    end
+
+    def initialize(key:, entries:, effective_at: nil, metadata: {}, operation: "post", reverses_id: nil, release_held: {})
+      @key = key
+      @entries = entries
+      @effective_at = effective_at
+      @metadata = metadata
+      @operation = operation
+      @reverses_id = reverses_id
+      @release_held = release_held
+    end
+
+    def call
+      validate_shape!
+      load_accounts!
+      check_currencies!
+      check_balanced!
+
+      ApplicationRecord.transaction do
+        balances = AccountBalance.where(account_id: @accounts.values.map(&:id)).order(:account_id).index_by(&:account_id)
+        @release_held.each { |account_id, amount| balances.fetch(account_id).held_minor -= amount }
+        apply_deltas(balances)
+        check_available!(balances)
+
+        txn = LedgerTransaction.create!(
+          idempotency_key: @key,
+          request_hash: request_hash,
+          effective_at: @effective_at || Time.current,
+          metadata: @metadata,
+          reverses_id: @reverses_id
+        )
+        @entries.each do |e|
+          account = @accounts.fetch(e[:account_code])
+          txn.entries.create!(account: account, direction: e[:direction], amount_minor: e[:amount_minor], currency: account.currency)
+        end
+        balances.each_value do |row|
+          row.version += 1
+          row.save!
+        end
+        txn
+      end
+    end
+
+    private
+
+    def validate_shape!
+      raise InvalidRequest, "a transaction needs at least two entries" unless @entries.is_a?(Array) && @entries.size >= 2
+
+      @entries.each do |e|
+        raise InvalidRequest, "entry must be a hash" unless e.is_a?(Hash)
+        raise InvalidRequest, "unknown direction #{e[:direction].inspect}" unless DIRECTIONS.include?(e[:direction])
+
+        amount = e[:amount_minor]
+        raise InvalidRequest, "amount_minor must be a positive Integer" unless amount.is_a?(Integer) && amount.positive?
+      end
+    end
+
+    def load_accounts!
+      codes = @entries.map { |e| e[:account_code] }.uniq
+      @accounts = Account.where(code: codes).index_by(&:code)
+      missing = codes - @accounts.keys
+      raise NotFound, "unknown account #{missing.first.inspect}" if missing.any?
+    end
+
+    def check_currencies!
+      @entries.each do |e|
+        next unless e.key?(:currency) && !e[:currency].nil?
+
+        account = @accounts.fetch(e[:account_code])
+        raise CurrencyMismatch, "#{account.code} is #{account.currency}, entry says #{e[:currency]}" if e[:currency] != account.currency
+      end
+    end
+
+    def check_balanced!
+      totals = Hash.new(0)
+      @entries.each do |e|
+        sign = e[:direction] == "debit" ? 1 : -1
+        totals[@accounts.fetch(e[:account_code]).currency] += sign * e[:amount_minor]
+      end
+      unbalanced = totals.select { |_, net| net != 0 }
+      raise Unbalanced, "entries do not balance in #{unbalanced.keys.join(', ')}" if unbalanced.any?
+    end
+
+    def apply_deltas(balances)
+      @entries.each do |e|
+        row = balances.fetch(@accounts.fetch(e[:account_code]).id)
+        if e[:direction] == "debit"
+          row.debits_minor += e[:amount_minor]
+        else
+          row.credits_minor += e[:amount_minor]
+        end
+      end
+    end
+
+    def check_available!(balances)
+      @accounts.each_value do |account|
+        next if account.allow_negative
+
+        row = balances.fetch(account.id)
+        posted = Balance.posted_minor(normal_side: account.normal_side, debits_minor: row.debits_minor, credits_minor: row.credits_minor)
+        raise InsufficientFunds, "#{account.code} would go below zero available" if posted - row.held_minor < 0
+      end
+    end
+
+    def request_hash
+      RequestHash.call(operation: @operation, entries: @entries, effective_at: @effective_at, metadata: @metadata)
+    end
+  end
+end

@@ -82,6 +82,75 @@ CREATE TABLE public.ar_internal_metadata (
 
 
 --
+-- Name: entries; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.entries (
+    id bigint NOT NULL,
+    ledger_transaction_id bigint NOT NULL,
+    account_id bigint NOT NULL,
+    direction text NOT NULL,
+    amount_minor bigint NOT NULL,
+    currency character(3) NOT NULL,
+    CONSTRAINT entries_amount_minor_check CHECK ((amount_minor > 0)),
+    CONSTRAINT entries_direction_check CHECK ((direction = ANY (ARRAY['debit'::text, 'credit'::text])))
+);
+
+
+--
+-- Name: entries_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.entries_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: entries_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.entries_id_seq OWNED BY public.entries.id;
+
+
+--
+-- Name: ledger_transactions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ledger_transactions (
+    id bigint NOT NULL,
+    idempotency_key text NOT NULL,
+    request_hash character(64) NOT NULL,
+    effective_at timestamp with time zone NOT NULL,
+    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+    reverses_id bigint,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: ledger_transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.ledger_transactions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: ledger_transactions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.ledger_transactions_id_seq OWNED BY public.ledger_transactions.id;
+
+
+--
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -95,6 +164,20 @@ CREATE TABLE public.schema_migrations (
 --
 
 ALTER TABLE ONLY public.accounts ALTER COLUMN id SET DEFAULT nextval('public.accounts_id_seq'::regclass);
+
+
+--
+-- Name: entries id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.entries ALTER COLUMN id SET DEFAULT nextval('public.entries_id_seq'::regclass);
+
+
+--
+-- Name: ledger_transactions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ledger_transactions ALTER COLUMN id SET DEFAULT nextval('public.ledger_transactions_id_seq'::regclass);
 
 
 --
@@ -122,6 +205,22 @@ ALTER TABLE ONLY public.ar_internal_metadata
 
 
 --
+-- Name: entries entries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.entries
+    ADD CONSTRAINT entries_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ledger_transactions ledger_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ledger_transactions
+    ADD CONSTRAINT ledger_transactions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -134,6 +233,58 @@ ALTER TABLE ONLY public.schema_migrations
 --
 
 CREATE UNIQUE INDEX index_accounts_on_code ON public.accounts USING btree (code);
+
+
+--
+-- Name: index_entries_on_account_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_entries_on_account_id ON public.entries USING btree (account_id);
+
+
+--
+-- Name: index_entries_on_ledger_transaction_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_entries_on_ledger_transaction_id ON public.entries USING btree (ledger_transaction_id);
+
+
+--
+-- Name: index_ledger_transactions_on_idempotency_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_ledger_transactions_on_idempotency_key ON public.ledger_transactions USING btree (idempotency_key);
+
+
+--
+-- Name: index_ledger_transactions_on_reverses_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_ledger_transactions_on_reverses_id ON public.ledger_transactions USING btree (reverses_id);
+
+
+--
+-- Name: entries fk_rails_37a3feaeb6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.entries
+    ADD CONSTRAINT fk_rails_37a3feaeb6 FOREIGN KEY (account_id) REFERENCES public.accounts(id);
+
+
+--
+-- Name: ledger_transactions fk_rails_969c84a0e1; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ledger_transactions
+    ADD CONSTRAINT fk_rails_969c84a0e1 FOREIGN KEY (reverses_id) REFERENCES public.ledger_transactions(id);
+
+
+--
+-- Name: entries fk_rails_dfe59f25ea; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.entries
+    ADD CONSTRAINT fk_rails_dfe59f25ea FOREIGN KEY (ledger_transaction_id) REFERENCES public.ledger_transactions(id);
 
 
 --
@@ -151,5 +302,6 @@ ALTER TABLE ONLY public.account_balances
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261021000002'),
 ('20261021000001');
 
