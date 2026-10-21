@@ -7,7 +7,7 @@ Status: awaiting Tim's approval. No plan or code until it is approved.
 Countersign is a portfolio project about one question: how do you trust what an AI produces
 when money is involved? The ledger is the foundation. It is the only component that moves
 money; the pay rules engine and the review agent built later can only propose, and a human
-approves before anything is posted through the ledger's API.
+approves before anything is posted to the ledger.
 
 The ledger has to make one promise and prove it: money is never created, lost or paid twice.
 For a reviewer reading the repo, the tests that prove this promise, especially concurrency
@@ -19,15 +19,17 @@ All accounts, rules, people and amounts are invented. Nothing models a real comp
 
 - An immutable double-entry ledger in a Rails API app, `ledger/`, inside the `countersign` monorepo.
 - Balanced transactions, idempotent writes, overdraft-safe concurrent posting, holds and reversals.
-- A small JSON HTTP API so the Python review agent (later) never touches the database.
 - Tests that prove each guarantee (listed under "How we know it works").
 
 ## Non-goals
 
 - FX or multi-currency conversion. Each account has one currency; a transaction may span
   currencies only if each currency balances on its own.
+- The JSON HTTP API (endpoints, authentication, the `Idempotency-Key` header, HTTP error
+  codes). It comes in a later feature; for now the ledger is used through its Ruby service
+  objects, and the Python review agent will reach it only through that API once it exists.
 - Human approval workflow, decision log, outbox/event stream. Those are later features.
-- Users, roles, multi-tenancy. One shared API token is enough.
+- Users, roles, multi-tenancy.
 - Partial holds that stay open, hold expiry, scheduled postings.
 - Period close, statements, reporting UI, an account-creation endpoint.
 
@@ -119,25 +121,6 @@ index on `reverses_id`, which also settles races), and a reversal can't itself b
 re-post instead. Both stay visible and net to zero. A reversal can fail with
 `InsufficientFunds` if the money has since been spent, and that is correct.
 
-### HTTP API
-JSON under `/v1`, authenticated with `Authorization: Bearer <LEDGER_API_TOKEN>` (compared
-with `ActiveSupport::SecurityUtils.secure_compare`). Every write requires an
-`Idempotency-Key` header. First success returns 201; a replay returns the original body with 200.
-
-| Method and path | Purpose |
-|---|---|
-| `POST /v1/transactions` | Post `{entries: [{account_code, direction, amount_minor}], effective_at?, metadata?}` |
-| `GET /v1/transactions/:id` | Transaction with its entries, `reverses_id` and `reversed_by_id` |
-| `POST /v1/transactions/:id/reversal` | Reverse a transaction |
-| `GET /v1/accounts/:code` | Account with `posted_minor`, `held_minor`, `available_minor` |
-| `POST /v1/holds` | Place `{account_code, amount_minor}` |
-| `POST /v1/holds/:id/capture` | Capture `{counter_account_code, amount_minor}` |
-| `POST /v1/holds/:id/release` | Release |
-
-Errors are `{"error": {"code": "...", "message": "..."}}` with stable codes:
-`unbalanced` 422, `currency_mismatch` 422, `insufficient_funds` 422,
-`idempotency_conflict` 409, `invalid_state` 409, `not_found` 404, `unauthorized` 401.
-
 ## How we know it works
 
 | Proof | What it shows |
@@ -148,7 +131,6 @@ Errors are `{"error": {"code": "...", "message": "..."}}` with stable codes:
 | Immutability | Update and delete of entries and transactions fail in the database, including raw SQL |
 | Reversal | Nets to zero, both visible; second reversal and reversal-of-reversal rejected, including under a race |
 | Holds | Available = posted - held; capture less than held, release, replays, invalid transitions, overdraft via holds |
-| API | Request specs for each endpoint, auth, and every error code |
 
 Thread-based specs run against real Postgres with transactional fixtures off, truncating afterwards.
 
@@ -167,10 +149,10 @@ Thread-based specs run against real Postgres with transactional fixtures off, tr
 
 ## Left to the builder
 
-- Exact file split inside `app/services/ledger/` and the controllers, and serializer style.
+- Exact file split inside `app/services/ledger/`.
 - Canonical JSON details for the request hash, as long as logically equal payloads hash equal
   (entry order must not matter).
 - How the test suite truncates after thread-based specs, and the GitHub Actions CI setup
   (rspec and rubocop on push, with a Postgres service).
-- README wording, as long as it says all data is invented, shows how to run it with curl
-  examples, and lists each guarantee with the test that proves it.
+- README wording, as long as it says all data is invented, shows how to run it (with a
+  Rails console example of posting a transaction), and lists each guarantee with the test that proves it.
