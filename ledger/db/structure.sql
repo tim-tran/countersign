@@ -10,6 +10,41 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
+--
+-- Name: ledger_check_balanced(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.ledger_check_balanced() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF (SELECT count(*) FROM entries WHERE ledger_transaction_id = NEW.ledger_transaction_id) < 2
+     OR EXISTS (
+       SELECT 1 FROM entries
+       WHERE ledger_transaction_id = NEW.ledger_transaction_id
+       GROUP BY currency
+       HAVING sum(CASE direction WHEN 'debit' THEN amount_minor ELSE -amount_minor END) <> 0
+     ) THEN
+    RAISE EXCEPTION 'ledger transaction % is unbalanced', NEW.ledger_transaction_id;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+
+--
+-- Name: ledger_forbid_change(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.ledger_forbid_change() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  RAISE EXCEPTION 'ledger rows are immutable';
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -236,6 +271,13 @@ CREATE UNIQUE INDEX index_accounts_on_code ON public.accounts USING btree (code)
 
 
 --
+-- Name: index_accounts_on_id_and_currency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_accounts_on_id_and_currency ON public.accounts USING btree (id, currency);
+
+
+--
 -- Name: index_entries_on_account_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -261,6 +303,35 @@ CREATE UNIQUE INDEX index_ledger_transactions_on_idempotency_key ON public.ledge
 --
 
 CREATE UNIQUE INDEX index_ledger_transactions_on_reverses_id ON public.ledger_transactions USING btree (reverses_id);
+
+
+--
+-- Name: entries entries_balanced; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER entries_balanced AFTER INSERT ON public.entries DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.ledger_check_balanced();
+
+
+--
+-- Name: entries entries_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER entries_immutable BEFORE DELETE OR UPDATE ON public.entries FOR EACH ROW EXECUTE FUNCTION public.ledger_forbid_change();
+
+
+--
+-- Name: ledger_transactions ledger_transactions_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER ledger_transactions_immutable BEFORE DELETE OR UPDATE ON public.ledger_transactions FOR EACH ROW EXECUTE FUNCTION public.ledger_forbid_change();
+
+
+--
+-- Name: entries entries_account_currency_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.entries
+    ADD CONSTRAINT entries_account_currency_fkey FOREIGN KEY (account_id, currency) REFERENCES public.accounts(id, currency);
 
 
 --
@@ -302,6 +373,7 @@ ALTER TABLE ONLY public.account_balances
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261021000003'),
 ('20261021000002'),
 ('20261021000001');
 
