@@ -1,6 +1,6 @@
 # Ledger core design
 
-Status: awaiting Tim's approval. No plan or code until it is approved.
+Status: approved by Tim on 2026-10-21.
 
 ## Intent and the why
 
@@ -77,9 +77,12 @@ Each transaction records `effective_at` (business time, caller-supplied, default
 separately from `created_at` (system time), plus free-form `metadata`.
 
 ### Idempotency
-Every write carries an idempotency key naming the business event (`payrun-4411-capture`),
-not the attempt. The key is stored under a unique constraint with a SHA-256 hash of the
-canonical payload.
+Every write carries an idempotency key. The caller chooses it, and it names the business
+event (`payrun-4411-capture`), not the attempt: a retry reuses the key, a new event gets a new
+one. The key is stored under a unique constraint with a SHA-256 hash of the canonical payload
+(operation, entries in a fixed sort order, `effective_at`, `metadata`). The hash covers exactly
+what the caller sent: an omitted `effective_at` hashes as absent, and the "now" default is
+applied only when storing, so a retry seconds later still matches.
 - Same key, same payload: return the original result, move no money.
 - Same key, different payload: `Ledger::ConflictError`, move no money.
 - Concurrent requests with one key: exactly one transaction, returned to every caller. The
@@ -130,7 +133,7 @@ re-post instead. Both stay visible and net to zero. A reversal can fail with
 | Idempotency | Replay returns the original; a different payload conflicts; 10 concurrent duplicates make one transaction; a failed post leaves no key |
 | Immutability | Update and delete of entries and transactions fail in the database, including raw SQL |
 | Reversal | Nets to zero, both visible; second reversal and reversal-of-reversal rejected, including under a race |
-| Holds | Available = posted - held; capture less than held, release, replays, invalid transitions, overdraft via holds |
+| Holds | Available = posted - held, and every account's `held_minor` always equals the sum of its active holds' amounts; capture less than held, release, replays, invalid transitions, overdraft via holds |
 
 Thread-based specs run against real Postgres with transactional fixtures off, truncating afterwards.
 
