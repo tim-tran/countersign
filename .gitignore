@@ -14,3 +14,7 @@
 /ledger/tmp/storage/*
 !/ledger/tmp/storage/.keep
 /ledger/config/*.key
+
+# Superpowers worktrees and execution workspace
+.worktrees/
+.superpowers/
