@@ -40,5 +40,8 @@ module Ledger
     # Middleware like session, flash, cookies can be added back manually.
     # Skip views, helpers and assets when generating a new resource.
     config.api_only = true
+
+    # Invariants live in Postgres (constraints, triggers), which schema.rb cannot express.
+    config.active_record.schema_format = :sql
   end
 end
