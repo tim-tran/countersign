@@ -37,5 +37,18 @@ RSpec.describe Ledger::PostTransaction, "idempotency" do
       expect(LedgerTransaction.count).to eq 1
       expect(Ledger::Balance.for("cash").posted_minor).to eq 10_000
     end
+
+    it "concurrent duplicates of a draining spend all get the original" do
+      post(entries, key: "fund")
+      spend = [ leg("vendor", "debit", 10_000), leg("cash", "credit", 10_000) ]
+      before_count = LedgerTransaction.count
+
+      results = run_concurrently(10) { post(spend, key: "dup") }
+
+      expect(results).to all(be_a(LedgerTransaction))
+      expect(results.map(&:id).uniq.size).to eq 1
+      expect(LedgerTransaction.count).to eq before_count + 1
+      expect(Ledger::Balance.for("cash").posted_minor).to eq 0
+    end
   end
 end

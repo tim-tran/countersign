@@ -50,8 +50,14 @@ module Ledger
       check_currencies!
       check_balanced!
 
-      ApplicationRecord.transaction do
+      replayed = nil
+      posted = ApplicationRecord.transaction do
         balances = lock_balances
+        # A duplicate that waited on the lock may now see the winner's commit;
+        # replay it before the (now drained) balances can reject the request.
+        replayed = LedgerTransaction.find_by(idempotency_key: @key)
+        next if replayed
+
         @release_held.each { |account_id, amount| balances.fetch(account_id).held_minor -= amount }
         apply_deltas(balances)
         check_available!(balances)
@@ -73,6 +79,7 @@ module Ledger
         end
         txn
       end
+      replayed ? replay(replayed) : posted
     end
 
     # Locks every touched balance row in ascending account_id order so that
