@@ -55,7 +55,8 @@ module Ledger
         balances = lock_balances
         # A duplicate that waited on the lock may now see the winner's commit;
         # replay it before the (now drained) balances can reject the request.
-        replayed = LedgerTransaction.find_by(idempotency_key: @key)
+        # Uncached: the pre-check above may have cached a nil for this query.
+        replayed = LedgerTransaction.uncached { LedgerTransaction.find_by(idempotency_key: @key) }
         next if replayed
 
         @release_held.each { |account_id, amount| balances.fetch(account_id).held_minor -= amount }
