@@ -59,6 +59,8 @@ module Ledger
         replayed = LedgerTransaction.uncached { LedgerTransaction.find_by(idempotency_key: @key) }
         next if replayed
 
+        ensure_not_already_reversed!
+
         @release_held.each { |account_id, amount| balances.fetch(account_id).held_minor -= amount }
         apply_deltas(balances)
         check_available!(balances)
@@ -81,6 +83,17 @@ module Ledger
         txn
       end
       replayed ? replay(replayed) : posted
+    end
+
+    # Runs under the balance locks, so concurrent reversals of one transaction
+    # (which touch the same accounts) serialize here and the loser gets a
+    # clear InvalidState before the funds check can mask it. The unique index
+    # on reverses_id remains the backstop.
+    def ensure_not_already_reversed!
+      return unless @reverses_id
+      return unless LedgerTransaction.uncached { LedgerTransaction.exists?(reverses_id: @reverses_id) }
+
+      raise InvalidState, "transaction #{@reverses_id} has already been reversed"
     end
 
     # Locks every touched balance row in ascending account_id order so that
