@@ -18,7 +18,7 @@ require "action_cable/engine"
 # you've limited to :test, :development, or :production.
 Bundler.require(*Rails.groups)
 
-module Ledger
+module Countersign
   class Application < Rails::Application
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults 8.1
@@ -40,5 +40,8 @@ module Ledger
     # Middleware like session, flash, cookies can be added back manually.
     # Skip views, helpers and assets when generating a new resource.
     config.api_only = true
+
+    # Invariants live in Postgres (constraints, triggers), which schema.rb cannot express.
+    config.active_record.schema_format = :sql
   end
 end

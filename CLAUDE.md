@@ -29,6 +29,6 @@ All pay rules, rates, people and amounts are invented. Nothing here models a rea
 
 ## Commands (ledger/)
 
-- `bin/setup` install gems and prepare the database
+- `bin/setup --skip-server` install gems and prepare the database
 - `bundle exec rspec` run all tests
 - `bundle exec rubocop` lint
