@@ -41,6 +41,7 @@ RSpec.describe "Ledger database guards" do
         -> { entry.update_columns(amount_minor: 1) },
         -> { entry.destroy },
         -> { Entry.delete_all },
+        -> { LedgerTransaction.connection.execute("DELETE FROM ledger_transactions") },
         -> { LedgerTransaction.connection.execute("UPDATE entries SET amount_minor = 1") } ].each do |attempt|
         expect { ApplicationRecord.transaction(requires_new: true) { attempt.call } }
           .to raise_error(ActiveRecord::StatementInvalid, /immutable/)

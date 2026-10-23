@@ -14,7 +14,8 @@ Requires [mise](https://mise.jdx.dev) and a local PostgreSQL.
 ```sh
 mise install            # from the repo root: installs Ruby 4.0.7
 cd ledger
-bin/setup               # installs gems, prepares the databases
+bin/setup --skip-server # installs gems, prepares the databases
+bin/rails db:seed       # loads the chart of accounts used by the walkthrough
 bundle exec rspec       # runs the suite
 bin/rubocop             # lint (rubocop-rails-omakase)
 ```
@@ -89,7 +90,7 @@ To rerun, `bin/rails db:reset` the development database first.
 
 | Guarantee | Proven by |
 | --- | --- |
-| Every transaction balances, per currency; mixed currencies are rejected | `spec/services/ledger/post_transaction_spec.rb`, `spec/db/ledger_guards_spec.rb` |
+| Every transaction balances; every currency balances on its own, and an entry in a currency other than its account's is rejected | `spec/services/ledger/post_transaction_spec.rb`, `spec/db/ledger_guards_spec.rb` |
 | Writes are idempotent by key, including concurrent duplicates | `spec/services/ledger/idempotency_spec.rb` |
 | No overdraft under concurrent postings | `spec/services/ledger/concurrency_spec.rb` |
 | Posted rows are immutable (updates and deletes fail in the database) | `spec/db/ledger_guards_spec.rb` |
@@ -102,6 +103,14 @@ Also: `spec/models/account_spec.rb` (account validations), `spec/services/ledger
 
 ## Immutability and TRUNCATE
 
-A `BEFORE UPDATE OR DELETE` row trigger on transactions and entries raises
+A `BEFORE UPDATE OR DELETE` row trigger on `ledger_transactions` and `entries` raises
 `ledger rows are immutable`, so even `update_columns` or raw SQL fails. `TRUNCATE` is left
 allowed so test cleanup works; a deployed app's database role would not hold `TRUNCATE`.
+
+## Known limits
+
+- INSERT on `entries` is not guarded: a balanced pair of entries can still be appended to an
+  already committed transaction with raw SQL, and the deferred balance check will accept it.
+- `TRUNCATE` is not blocked by the triggers; a deployed app's database role would not hold it.
+- `normal_side` and `kind` cannot be changed on an account that has entries (a trigger enforces
+  it), but other account columns can.
