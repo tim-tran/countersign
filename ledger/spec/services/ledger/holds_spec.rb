@@ -78,6 +78,17 @@ RSpec.describe "Ledger holds" do
     expect { Ledger::CaptureHold.call(hold_id: other.id, key: "used", counter_account_code: "vendor", amount_minor: 100) }.to raise_error(Ledger::ConflictError)
   end
 
+  it "replays a duplicate capture whose hold was read before the original committed" do
+    hold = Ledger::PlaceHold.call(key: "h1", account_code: "cash", amount_minor: 100)
+    stale = Hold.includes(:account).find(hold.id)
+    capture = -> { Ledger::CaptureHold.call(hold_id: hold.id, key: "c1", counter_account_code: "vendor", amount_minor: 100) }
+    capture.call
+    # The duplicate's first read of the hold still shows it active, without a transaction.
+    allow(Hold).to receive(:includes).with(:account).and_return(instance_double(ActiveRecord::Relation, find_by: stale))
+
+    expect { expect(capture.call).to eq hold }.not_to change(Entry, :count)
+  end
+
   it "raises NotFound for an unknown hold or account" do
     expect { Ledger::ReleaseHold.call(hold_id: 0) }.to raise_error(Ledger::NotFound)
     expect { Ledger::CaptureHold.call(hold_id: 0, key: "c1", counter_account_code: "vendor", amount_minor: 1) }.to raise_error(Ledger::NotFound)

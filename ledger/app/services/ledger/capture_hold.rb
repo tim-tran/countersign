@@ -49,11 +49,13 @@ module Ledger
 
     private
 
-    # The key is taken: only a repeat of this hold's own capture replays.
+    # The key is taken: only a repeat of this hold's own capture replays. The
+    # hash covers operation "capture" and metadata {"hold_id" => id}, so it
+    # cannot match another hold's capture or a plain posting. It is compared
+    # instead of @hold.ledger_transaction_id, which may be a stale read taken
+    # before the original capture committed.
     def replay(existing)
-      unless existing.id == @hold.ledger_transaction_id && existing.request_hash == request_hash
-        raise ConflictError, "idempotency key #{@key.inspect} was already used for a different request"
-      end
+      raise ConflictError, "idempotency key #{@key.inspect} was already used for a different request" unless existing.request_hash == request_hash
 
       @hold.reload
     end
