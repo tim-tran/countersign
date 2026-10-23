@@ -17,6 +17,24 @@ RSpec.describe Ledger::PostTransaction do
     expect(post([ leg("cash", "debit", 1), leg("funding", "credit", 1) ], effective_at: t).effective_at).to eq t
   end
 
+  it "accepts a Date as the start of that day in the app zone" do
+    txn = post([ leg("cash", "debit", 1), leg("funding", "credit", 1) ], effective_at: Date.new(2026, 3, 1))
+    expect(txn.effective_at).to eq Time.zone.local(2026, 3, 1)
+  end
+
+  it "accepts an ISO-8601 string" do
+    txn = post([ leg("cash", "debit", 1), leg("funding", "credit", 1) ], effective_at: "2026-03-01T12:00:00Z")
+    expect(txn.effective_at).to eq Time.utc(2026, 3, 1, 12)
+  end
+
+  it "rejects an unparseable or unsupported effective_at and writes nothing" do
+    [ "garbage", 12_345, {} ].each do |bad|
+      expect { post([ leg("cash", "debit", 1), leg("funding", "credit", 1) ], effective_at: bad) }
+        .to raise_error(Ledger::InvalidRequest, /effective_at/)
+    end
+    expect(LedgerTransaction.count).to eq 0
+  end
+
   it "rejects unbalanced" do
     expect { post([ leg("cash", "debit", 100), leg("funding", "credit", 99) ]) }.to raise_error(Ledger::Unbalanced)
   end

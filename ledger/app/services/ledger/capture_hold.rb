@@ -33,6 +33,7 @@ module Ledger
           next replay(existing)
         end
         raise InvalidState, "hold #{hold.id} is #{hold.status}, cannot capture" unless hold.status == "active"
+        raise InvalidRequest, "counter account must differ from the held account" if @counter_account_code == hold.account.code
         raise InvalidRequest, "amount_minor must be an Integer in 1..#{hold.amount_minor}" unless @amount_minor.is_a?(Integer) && @amount_minor.between?(1, hold.amount_minor)
 
         txn = PostTransaction.call(

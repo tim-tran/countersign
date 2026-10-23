@@ -19,6 +19,12 @@ RSpec.describe Ledger::PostTransaction, "idempotency" do
     end
   end
 
+  it "treats an ISO string and a Time for the same instant as the same request" do
+    t = Time.utc(2026, 3, 1, 12, 0, 0)
+    first = post(entries, key: "k", effective_at: t.iso8601)
+    expect { expect(post(entries, key: "k", effective_at: t)).to eq first }.not_to change(Entry, :count)
+  end
+
   it "different payload with the same key conflicts" do
     post(entries, key: "k")
     expect { post(other_entries, key: "k") }.to raise_error(Ledger::ConflictError, /"k"/)

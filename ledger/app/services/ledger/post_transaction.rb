@@ -91,6 +91,11 @@ module Ledger
     # on reverses_id remains the backstop.
     def ensure_not_already_reversed!
       return unless @reverses_id
+
+      target = LedgerTransaction.uncached { LedgerTransaction.find_by(id: @reverses_id) }
+      raise NotFound, "transaction #{@reverses_id.inspect} not found" unless target
+      raise InvalidState, "a reversal cannot be reversed; re-post instead" if target.reverses_id
+
       return unless LedgerTransaction.uncached { LedgerTransaction.exists?(reverses_id: @reverses_id) }
 
       raise InvalidState, "transaction #{@reverses_id} has already been reversed"
@@ -104,6 +109,7 @@ module Ledger
     end
 
     def validate_shape!
+      @effective_at = normalize_effective_at(@effective_at)
       raise InvalidRequest, "a transaction needs at least two entries" unless @entries.is_a?(Array) && @entries.size >= 2
 
       @entries.each do |e|
@@ -112,6 +118,23 @@ module Ledger
 
         amount = e[:amount_minor]
         raise InvalidRequest, "amount_minor must be a positive Integer" unless amount.is_a?(Integer) && amount.positive?
+      end
+    end
+
+    # Normalised to a Time before hashing, so an ISO string and a Time for the
+    # same instant are the same request. A Date means the start of that day in
+    # the app zone.
+    def normalize_effective_at(value)
+      case value
+      when nil then nil
+      when String
+        begin
+          Time.zone.iso8601(value)
+        rescue ArgumentError
+          raise InvalidRequest, "effective_at is not an ISO-8601 timestamp: #{value.inspect}"
+        end
+      when Time, ActiveSupport::TimeWithZone, DateTime, Date then value.in_time_zone
+      else raise InvalidRequest, "effective_at must be a Time, Date or ISO-8601 string"
       end
     end
 
