@@ -16,6 +16,7 @@ SET row_security = off;
 
 CREATE FUNCTION public.ledger_check_balanced() RETURNS trigger
     LANGUAGE plpgsql
+    SET search_path TO 'public'
     AS $$
 BEGIN
   IF (SELECT count(*) FROM entries WHERE ledger_transaction_id = NEW.ledger_transaction_id) < 2
@@ -33,11 +34,30 @@ $$;
 
 
 --
+-- Name: ledger_forbid_account_redefinition(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.ledger_forbid_account_redefinition() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO 'public'
+    AS $$
+BEGIN
+  IF (NEW.normal_side IS DISTINCT FROM OLD.normal_side OR NEW.kind IS DISTINCT FROM OLD.kind)
+     AND EXISTS (SELECT 1 FROM entries WHERE account_id = OLD.id) THEN
+    RAISE EXCEPTION 'account % is in use; normal_side and kind cannot change', OLD.id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: ledger_forbid_change(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.ledger_forbid_change() RETURNS trigger
     LANGUAGE plpgsql
+    SET search_path TO 'public'
     AS $$
 BEGIN
   RAISE EXCEPTION 'ledger rows are immutable';
@@ -381,6 +401,13 @@ CREATE UNIQUE INDEX index_ledger_transactions_on_reverses_id ON public.ledger_tr
 
 
 --
+-- Name: accounts accounts_redefinition_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER accounts_redefinition_guard BEFORE UPDATE OF normal_side, kind ON public.accounts FOR EACH ROW EXECUTE FUNCTION public.ledger_forbid_account_redefinition();
+
+
+--
 -- Name: entries entries_balanced; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -464,6 +491,7 @@ ALTER TABLE ONLY public.account_balances
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261022000001'),
 ('20261021000004'),
 ('20261021000003'),
 ('20261021000002'),

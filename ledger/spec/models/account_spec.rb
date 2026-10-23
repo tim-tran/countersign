@@ -14,6 +14,21 @@ RSpec.describe Account do
     end
   end
 
+  it "forbids changing normal_side or kind once the account has entries" do
+    setup_accounts
+    post([ leg("cash", "debit", 100), leg("funding", "credit", 100) ])
+    { "normal_side" => "credit", "kind" => "liability" }.each do |col, value|
+      expect {
+        ApplicationRecord.transaction(requires_new: true) { Account.find_by!(code: "cash").update_column(col, value) }
+      }.to raise_error(ActiveRecord::StatementInvalid, /in use/)
+    end
+  end
+
+  it "allows changing normal_side and kind on an unused account" do
+    account = create(:account)
+    expect { account.update_columns(normal_side: "credit", kind: "liability") }.not_to raise_error
+  end
+
   it "rejects a duplicate code in the database" do
     create(:account, code: "employer_cash")
     expect { build(:account, code: "employer_cash").save!(validate: false) }.to raise_error(ActiveRecord::RecordNotUnique)

@@ -59,6 +59,13 @@ RSpec.describe "Ledger holds" do
     expect { Ledger::CaptureHold.call(hold_id: captured.id, key: "c-other", counter_account_code: "vendor", amount_minor: 1) }.to raise_error(Ledger::InvalidState)
   end
 
+  it "rejects capturing to the held account itself" do
+    hold = Ledger::PlaceHold.call(key: "self-h", account_code: "cash", amount_minor: 100)
+    expect { Ledger::CaptureHold.call(hold_id: hold.id, key: "self-c", counter_account_code: "cash", amount_minor: 100) }
+      .to raise_error(Ledger::InvalidRequest, /held account/)
+    expect(hold.reload.status).to eq "active"
+  end
+
   it "capture on a credit-normal account debits it" do  # Review Focus 5
     float = create(:account, :credit_normal, code: "float")
     post([ leg("funding", "debit", 5_000), leg("float", "credit", 5_000) ])

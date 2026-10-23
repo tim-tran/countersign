@@ -37,9 +37,16 @@ RSpec.describe Ledger::ReverseTransaction do
     expect { described_class.call(transaction_id: funding_txn.id, key: "rev-f") }.to raise_error(Ledger::InsufficientFunds)
   end
 
+  it "refuses to reverse a reversal even through PostTransaction directly" do
+    reversal = described_class.call(transaction_id: original.id, key: "rev-1")
+    entries = [ leg("vendor", "debit", 4_000), leg("cash", "credit", 4_000) ]
+    expect { post(entries, operation: "reverse", reverses_id: reversal.id) }
+      .to raise_error(Ledger::InvalidState, /reversal/)
+  end
+
   it "rejects a duplicate reverses_id under a fresh key, even inside an outer transaction" do
     described_class.call(transaction_id: original.id, key: "rev-1")
-    entries = [ leg("vendor", "credit", 4_000), leg("cash", "debit", 4_000) ]
+    entries = [ leg("vendor", "debit", 4_000), leg("cash", "credit", 4_000) ]
     expect do
       ApplicationRecord.transaction do
         Ledger::PostTransaction.call(key: "rev-dup", entries: entries, operation: "reverse", reverses_id: original.id)
